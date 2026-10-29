@@ -1,0 +1,49 @@
+# Run from this directory (settings: copy .env.example to .env):
+#   docker compose up -d --build                     start the server
+#   docker compose run --rm android-builder          build the app (server must have run once)
+
+name: surfer
+
+services:
+  surfer:
+    build: ./server
+    image: surfer-server
+    container_name: surfer
+    init: true
+    restart: unless-stopped
+    shm_size: 1gb
+    mem_limit: ${SURFER_MEM_LIMIT:-6g}
+    security_opt:
+      # Docker's default profile plus clone/unshare/setns for Chromium's sandbox.
+      - seccomp=./server/seccomp-chromium.json
+    ports:
+      - "${SURFER_PORT:-8686}:8686" # app connection (wss)
+      - "${SURFER_INSTALL_PORT:-8687}:8687" # app download (http, APK only)
+    volumes:
+      - surfer-data:/data
+    environment:
+      IDLE_STOP_MIN: ${IDLE_STOP_MIN:-30}
+      ACCEPT_LANGUAGE: ${ACCEPT_LANGUAGE:-en-US,en} # comma list, no q-values (Chromium adds them)
+      IDLE_FORMAT: ${IDLE_FORMAT:-png}
+      DEBUG_CLIENT: ${DEBUG_CLIENT:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # 0 turns off the APK download port.
+      INSTALL_PORT: ${INSTALL_PORT:-8687}
+
+  android-builder:
+    build: ./android-builder
+    image: surfer-android-builder
+    profiles: [build]
+    environment:
+      # The port the app uses when the server address is typed without one.
+      SURFER_DEFAULT_PORT: ${SURFER_PORT:-8686}
+    volumes:
+      - ./android:/src:ro
+      - surfer-data:/data
+      - android-keystore:/keystore
+      - gradle-cache:/home/ubuntu/.gradle
+
+volumes:
+  surfer-data:
+  android-keystore:
+  gradle-cache:

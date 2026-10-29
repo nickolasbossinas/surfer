@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Surfer</string>
+    <string name="url_hint">Search or type address</string>
+    <string name="clear_url">Clear address</string>
+    <string name="back">Back</string>
+    <string name="forward">Forward</string>
+    <string name="reload">Reload</string>
+    <string name="stop">Stop</string>
+    <string name="tabs">Tabs</string>
+    <string name="menu">Menu</string>
+    <string name="setup_title">Connect to your Surfer server</string>
+    <string name="server_hint">Server address, e.g. 192.168.1.20</string>
+    <string name="server_unreachable">Cannot reach the server: %1$s</string>
+    <string name="connect">Connect</string>
+    <string name="connecting">Connecting…</string>
+    <string name="reconnecting">Connection lost. Reconnecting…</string>
+    <string name="new_tab">New tab</string>
+    <string name="close_tab">Close tab</string>
+    <string name="layout_tablet">Tablet layout</string>
+    <string name="layout_phone">Phone layout</string>
+    <string name="layout_desktop">Desktop site</string>
+    <string name="full_screen">Full screen</string>
+    <string name="debug_log">Send debug log to server</string>
+    <string name="clear_data">Clear browsing data</string>
+    <string name="clear_data_message">Delete all cookies, site data and tabs of this device? You will be logged out of all sites.</string>
+    <string name="delete">Delete</string>
+    <string name="change_server">Change server</string>
+    <string name="taken_over_title">Opened on another device</string>
+    <string name="taken_over_message">This session is now in use on another device.</string>
+    <string name="use_here">Use here</string>
+    <string name="tls_error">The server\'s certificate does not match this app. Rebuild the app after the server certificate changed.</string>
+    <string name="fill_suggestion">Edit this suggestion</string>
+    <string name="page_says">%1$s says</string>
+    <string name="leave_page_title">Leave this page?</string>
+    <string name="leave_page_message">Changes you made may not be saved.</string>
+    <string name="leave">Leave</string>
+    <string name="stay">Stay</string>
+</resources>

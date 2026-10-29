@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules/
+server/dist/
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+
+# Local settings
+.env
+
+# Secrets and generated artifacts: certificates, keys and signing keystores are
+# created at run time inside Docker volumes and must never be committed.
+*.crt
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore
+*.apk
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log

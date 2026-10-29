@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.application'
+}
+
+def versionCodeEnv = System.getenv('SURFER_VERSION_CODE')
+def keystorePath = System.getenv('SURFER_KEYSTORE')
+def defaultPort = (System.getenv('SURFER_DEFAULT_PORT') ?: '8686').toInteger()
+
+android {
+    namespace = 'surfer.tablet'
+    compileSdk = 36
+    buildToolsVersion = '36.0.0'
+
+    defaultConfig {
+        applicationId = 'surfer.tablet'
+        minSdk = 19
+        targetSdk = 36
+        versionCode = versionCodeEnv ? versionCodeEnv.toInteger() : 1
+        versionName = project.property('surferVersion')
+        buildConfigField 'int', 'DEFAULT_PORT', String.valueOf(defaultPort)
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile = file(keystorePath)
+                storeType = 'PKCS12'
+                storePassword = System.getenv('SURFER_KEYSTORE_PASSWORD')
+                keyAlias = 'surfer'
+                keyPassword = System.getenv('SURFER_KEYSTORE_PASSWORD')
+            }
+            // Android 4.4 only verifies v1 (JAR) signatures.
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.release
+            minifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}
+
+dependencies {
+    // 3.12.x is the last OkHttp line that supports Android 4.4.
+    implementation 'com.squareup.okhttp3:okhttp:3.12.13'
+    testImplementation 'junit:junit:4.13.2'
+}
