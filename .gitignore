@@ -5,6 +5,10 @@ android/build/
 android/app/build/
 android/.gradle/
 android/local.properties
+android-x10/build/
+android-x10/app/build/
+android-x10/.gradle/
+android-x10/local.properties
 
 # Local settings
 .env

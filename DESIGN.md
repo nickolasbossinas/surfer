@@ -11,8 +11,8 @@ session runs.
 
 - **Primary client:** Android 4.4.2 tablet (API 19), native app. No compromises
   for the sake of other devices.
-- **Secondary client (later):** Xperia X10, Android 2.1 (API 7). A separate app
-  that shares only the protocol.
+- **Secondary client:** Xperia X10, Android 2.1 (API 7). A separate app
+  (`android-x10/`) that shares only the protocol (§4.2).
 - **Server:** Docker on a 64-bit machine (x86-64 or ARM64). Windows with Docker
   Desktop (WSL2) and native Linux are both supported.
 - **Network:** home LAN only, TLS on the WebSocket.
@@ -28,7 +28,8 @@ session runs.
 | Native pickers (select, date/time, colour), context menu, text selection | v1 |
 | Tabs, clipboard, JS and HTTP-auth dialogs | v1 |
 | Device identity, browser state stored on the device and synced live | v1 |
-| Bookmarks, downloads, audio, X10 app | later |
+| X10 app (Android 2.1) | v1 |
+| Bookmarks, downloads, audio | later |
 | Video (H.264), file uploads | much later |
 
 Logins: Surfer stores no site passwords. Cookies persist (on the device), so
@@ -243,12 +244,22 @@ through `setting` and come back as `settings`.
 - **TLS:** on first start the server creates an RSA-2048/SHA-256 self-signed
   certificate in `/data/tls`. Node 22's defaults negotiate TLS 1.2 with
   `ECDHE-RSA-AES128-GCM-SHA256`, which Android 4.4 supports.
-- **Install port 8687** (plain HTTP) serves only `/app.apk`, because Chrome 35
-  can't open the self-signed HTTPS. Disable with `INSTALL_PORT=0`.
+- **Install port 8687** (plain HTTP) serves only the APKs (`/app.apk`,
+  `/x10.apk`), because old browsers can't open the self-signed HTTPS. Disable
+  with `INSTALL_PORT=0`.
+- **Legacy port (off by default, `LEGACY_PORT=8688`):** Android 2.x speaks TLS
+  1.0 at most. This second listener accepts TLS 1.0 with only
+  `DHE-RSA-AES128-SHA` and `DHE-RSA-AES256-SHA` (ephemeral Diffie-Hellman,
+  so forward secrecy; 2048-bit group). OpenSSL 3 needs `@SECLEVEL=0` for TLS
+  1.0. The main port keeps TLS 1.2+ only. The certificate is the same and is
+  pinned by both apps, so a man in the middle cannot present another one.
+- **Image formats:** the device lists what it decodes in `hello.caps.formats`;
+  WebP is sent only to devices that list it (Android 2.x has no WebP).
 
 ### 3.9 Host notes
 
-- **Windows (Docker Desktop):** allow inbound TCP 8686 and 8687 in Windows
+- **Windows (Docker Desktop):** allow inbound TCP 8686 and 8687 (and 8688 for
+  the X10 app) in Windows
   Firewall on the Private profile, set the Wi-Fi to Private, and stop the
   laptop from sleeping while in use.
 - **Linux:** nothing extra.
@@ -337,6 +348,27 @@ Java, plain Android SDK, `minSdk 19`, `targetSdk 36`, no AndroidX.
   (OkHttp closes the socket above 16 MB).
 - "Clear browsing data" sends `forget`; the server wipes the session and answers
   `forgotten`, and the device deletes its files.
+
+### 4.2 X10 app (Android 2.1)
+
+`android-x10/`, package `surfer.x10`, minSdk 7. A copy of the tablet app
+adapted to Android 2.1; the tablet app is not constrained by it. Lint fails the
+build on any platform call newer than API 7 (`NewApi`, `InlinedApi`).
+
+| Tablet app | X10 app | Why |
+|---|---|---|
+| OkHttp WebSocket, TLS 1.2 | own RFC 6455 client (`net/WebSocket.java`) over TLS 1.0, legacy port | no library supports 2.1; 2.1 has no TLS 1.2 |
+| Certificate pinned through a trust store | trust manager comparing the certificate bytes | same guarantee, simpler on 2.1 |
+| AES-256-GCM, key wrapped by the Android keystore | AES-256-CBC + HMAC-SHA256 (encrypt-then-MAC), keys in private preferences | no GCM, no keystore on 2.1 |
+| Picture decoded into reused ARGB bitmaps | every update painted onto one RGB 565 picture | no `inBitmap` before 3.0; half the memory; the X10 screen is 16-bit |
+| `adjustNothing` + popup window measuring the keyboard | `adjustResize`; in full screen the visible display frame | simpler where the window can resize |
+| PopupMenu in the bar | options menu (hardware Menu key); toggles titled with what they do | no PopupMenu, no check marks in 2.x menus |
+| Immersive full screen | `FLAG_FULLSCREEN` (status bar only) | no system UI flags |
+| Bar: back, forward, reload, URL, tabs, menu | back, reload, URL, tabs; forward in the menu | 320 dp wide screen |
+| WebP accepted | JPEG and PNG only | no WebP decoder |
+
+The default layout is `phone`. The X10 has a single-touch screen, so there is
+no pinch zoom; double-tap zoom works where the page allows zooming.
 
 ## 5. Protocol (version 1)
 
@@ -470,13 +502,16 @@ Rectangle:
     `build-tools;36.0.0`.
   - Gradle 9.8.2, AGP 9.5.0.
   - `android.builtInKotlin=false`, Java 11 source, v1+v2 signing.
-- **Build:** `docker compose run --rm android-builder`
+- **Build:** `docker compose run --rm android-builder` (tablet) or
+  `docker compose run --rm android-builder-x10` (X10)
   1. copies `/data/tls/server.crt` into `res/raw/server.crt`;
   2. signs with the keystore in the `android-keystore` volume, which is reused
-     so updates install over the old version;
-  3. writes `/data/apk/surfer.apk`.
-- **Install:** on the tablet, enable Settings → Security → Unknown sources once,
-  then open `http://<server>:8687/app.apk` in Chrome.
+     so updates install over the old version (v1 signature with SHA-1 digests
+     for API < 18, chosen by apksigner from minSdk);
+  3. writes `/data/apk/surfer.apk` or `/data/apk/surfer-x10.apk`.
+- **Install:** on the device, enable Settings → Security (Applications on 2.x)
+  → Unknown sources once, then open `http://<server>:8687/app.apk` (tablet) or
+  `http://<server>:8687/x10.apk` (X10) in the browser.
 
 The certificate is generated by the server on first start, so the server must
 run once before the first app build. If `/data/tls` is deleted, the app must be
@@ -487,7 +522,7 @@ rebuilt.
 ```
 Surfer/
 ├─ DESIGN.md
-├─ docker-compose.yml          services: surfer, android-builder
+├─ docker-compose.yml          services: surfer, android-builder, android-builder-x10
 ├─ server/
 │  ├─ Dockerfile, package.json, tsconfig.json, seccomp-chromium.json
 │  ├─ src/
@@ -510,6 +545,7 @@ Surfer/
 │  ├─ debug/                   desktop debug client (same protocol)
 │  └─ test/                    unit and integration tests
 ├─ android/                    tablet app (Gradle project): net/, view/, state/
+├─ android-x10/                X10 app for Android 2.1 (Gradle project, §4.2)
 └─ android-builder/            Dockerfile, build.sh
 ```
 
@@ -528,7 +564,7 @@ Surfer/
 3. **Native UI:** pickers, context menu, selection and copy, clipboard, JS and
    auth dialogs, notices.
 4. **Smoothness:** scroll prediction per container, auto-hiding bar.
-5. **Later:** bookmarks, downloads, audio, X10 app. Much later: H.264 video,
+5. **Later:** bookmarks, downloads, audio. Much later: H.264 video,
    uploads.
 
 ## 9. Verification

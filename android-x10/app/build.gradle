@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+def versionCodeEnv = System.getenv('SURFER_VERSION_CODE')
+def keystorePath = System.getenv('SURFER_KEYSTORE')
+def defaultPort = (System.getenv('SURFER_DEFAULT_PORT') ?: '8688').toInteger()
+
+android {
+    namespace = 'surfer.x10'
+    compileSdk = 36
+    buildToolsVersion = '36.0.0'
+
+    defaultConfig {
+        applicationId = 'surfer.x10'
+        minSdk = 7
+        targetSdk = 36
+        versionCode = versionCodeEnv ? versionCodeEnv.toInteger() : 1
+        versionName = project.property('surferVersion')
+        buildConfigField 'int', 'DEFAULT_PORT', String.valueOf(defaultPort)
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile = file(keystorePath)
+                storeType = 'PKCS12'
+                storePassword = System.getenv('SURFER_KEYSTORE_PASSWORD')
+                keyAlias = 'surfer'
+                keyPassword = System.getenv('SURFER_KEYSTORE_PASSWORD')
+            }
+            // Android 2.x only verifies v1 (JAR) signatures.
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.release
+            minifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        // Every platform call must exist on Android 2.1 (API 7): calling a newer
+        // one crashes there, so the build fails instead.
+        checkReleaseBuilds = true
+        abortOnError = true
+        checkOnly 'NewApi', 'InlinedApi', 'WrongConstant'
+        error 'NewApi', 'InlinedApi'
+    }
+}
+
+dependencies {
+    // No libraries: none of today's support Android 2.1.
+    testImplementation 'junit:junit:4.13.2'
+}

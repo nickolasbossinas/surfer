@@ -1,6 +1,7 @@
 # Run from this directory (settings: copy .env.example to .env):
 #   docker compose up -d --build                     start the server
-#   docker compose run --rm android-builder          build the app (server must have run once)
+#   docker compose run --rm android-builder          build the tablet app (server must have run once)
+#   docker compose run --rm android-builder-x10      build the Android 2.x app (needs LEGACY_PORT)
 
 name: surfer
 
@@ -19,6 +20,7 @@ services:
     ports:
       - "${SURFER_PORT:-8686}:8686" # app connection (wss)
       - "${SURFER_INSTALL_PORT:-8687}:8687" # app download (http, APK only)
+      - "${SURFER_LEGACY_PORT:-8688}:8688" # Android 2.x app connection (TLS 1.0), when LEGACY_PORT is set
     volumes:
       - surfer-data:/data
     environment:
@@ -29,19 +31,29 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # 0 turns off the APK download port.
       INSTALL_PORT: ${INSTALL_PORT:-8687}
+      # 8688 turns on the TLS 1.0 port for the Android 2.x app; 0 keeps it off.
+      LEGACY_PORT: ${LEGACY_PORT:-0}
 
-  android-builder:
+  android-builder: &builder
     build: ./android-builder
     image: surfer-android-builder
     profiles: [build]
     environment:
-      # The port the app uses when the server address is typed without one.
+      # The port the apps use when the server address is typed without one.
       SURFER_DEFAULT_PORT: ${SURFER_PORT:-8686}
+      SURFER_LEGACY_DEFAULT_PORT: ${SURFER_LEGACY_PORT:-8688}
     volumes:
       - ./android:/src:ro
+      - ./android-x10:/src-x10:ro
       - surfer-data:/data
       - android-keystore:/keystore
       - gradle-cache:/home/ubuntu/.gradle
+
+  android-builder-x10:
+    <<: *builder
+    environment:
+      SURFER_APP: x10
+      SURFER_LEGACY_DEFAULT_PORT: ${SURFER_LEGACY_PORT:-8688}
 
 volumes:
   surfer-data:

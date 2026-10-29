@@ -38,6 +38,8 @@ export class Connection implements Client {
   private readonly handshakeTimer: NodeJS.Timeout;
   private readonly heartbeat: NodeJS.Timeout;
   private alive = true;
+  /** Without a list from the device: JPEG and PNG, which every Android decodes. */
+  formats: ReadonlySet<string> = new Set(['jpeg', 'png']);
 
   constructor(
     private readonly ws: WebSocket,
@@ -128,6 +130,7 @@ export class Connection implements Client {
     this.key = sessionKey(msg.deviceId);
     this.log = logger(`conn:${this.key.slice(0, 8)}@${this.ip}`);
     this.log.info(`hello from ${msg.app} ${msg.appVersion} (${msg.device?.model ?? 'unknown device'})`);
+    if (Array.isArray(msg.caps?.formats)) this.formats = new Set(msg.caps.formats.filter((f) => typeof f === 'string'));
     const v = msg.viewport;
     if (v && typeof v.w === 'number' && typeof v.h === 'number' && typeof v.dpr === 'number') this.viewport = v;
 

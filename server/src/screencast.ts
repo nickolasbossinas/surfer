@@ -30,6 +30,8 @@ const CHANNELS = 3;
 
 export interface FrameSink {
   sendFrame(frame: Buffer): void;
+  /** Image formats the device decodes (Android 2.x has no WebP). */
+  readonly formats: ReadonlySet<string>;
 }
 
 export interface Viewport {
@@ -291,7 +293,7 @@ export class Screencast {
   }
 
   private losslessFormat(): ImageFormat {
-    return config.idleFormat === 'webp' ? ImageFormat.Webp : ImageFormat.Png;
+    return config.idleFormat === 'webp' && this.sink.formats.has('webp') ? ImageFormat.Webp : ImageFormat.Png;
   }
 
   private async encode(frame: RawFrame, r: PixelRect, format: ImageFormat): Promise<FrameRect> {

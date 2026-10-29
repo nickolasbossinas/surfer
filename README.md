@@ -9,16 +9,18 @@ picture of the page and sends your touches and keystrokes back. It works like
 Puffin or Opera Mini, but on your own machine, so your logins and browsing
 never pass through anyone else's servers.
 
-Version **0.1.0**. It is used daily on an Android 4.4.2 tablet, mostly for
+Version **0.2.0**. It is used daily on an Android 4.4.2 tablet, mostly for
 reading and email.
 
 ---
 
 ## Features
 
-- **The modern web on Android 4.4+.** Pages are rendered by a current
-  Chromium (156 at the time of writing). The app needs Android 4.4 (API 19)
-  or later.
+- **The modern web on Android 4.4+, and even Android 2.1.** Pages are
+  rendered by a current Chromium (156 at the time of writing). The main app
+  needs Android 4.4 (API 19) or later; a second app runs on Android 2.1 and
+  2.2 devices such as the Sony Ericsson Xperia X10 (see
+  [Android 2.x devices](#android-2x-devices)).
 - **Native-feeling touch.** Tap, scroll, fling and pinch-zoom are forwarded as
   real multi-touch events with their original timing, so scrolling momentum
   and gestures behave like a phone browser.
@@ -94,7 +96,8 @@ a local Java installation.
   Windows or macOS with Docker Desktop, all work.
 - Enough memory for one Chromium per connected device. The container is
   limited to 6 GB by default.
-- An Android device with Android 4.4 or later, on the same network.
+- An Android device with Android 4.4 or later (or 2.1 to 4.3 with the
+  [Android 2.x app](#android-2x-devices)), on the same network.
 
 ## Quick start
 
@@ -112,7 +115,7 @@ Docker volume. Check that it is running:
 
 ```sh
 docker compose logs surfer
-# ... Surfer 0.1.0 listening on https/wss port 8686 ...
+# ... Surfer 0.2.0 listening on https/wss port 8686 ...
 ```
 
 ### 2. Build the Android app
@@ -174,6 +177,29 @@ docker compose run --rm android-builder
 Then download and install the APK again from the same address. The update
 installs over the old app and keeps your browsing data.
 
+## Android 2.x devices
+
+Devices older than Android 4.4, such as the Xperia X10 (Android 2.1), use a
+separate app, **Surfer X10** (`android-x10/`). It works like the main app,
+adapted to a small single-touch phone: the Menu key opens the menu (forward,
+tabs, layout, full screen and more), and sites get their phone layout by
+default.
+
+Android 2.x can only use TLS 1.0, which the main port does not accept. The
+server therefore has a second port for these devices, **off by default**. It
+accepts TLS 1.0 with forward-secret ciphers only, and the app still pins the
+server's certificate. Turn it on only if you use the app:
+
+1. Add `LEGACY_PORT=8688` to `.env` and run `docker compose up -d`.
+2. Build the app: `docker compose run --rm android-builder-x10`.
+3. Allow port 8688 through the firewall (as in step 3 above).
+4. On the device, allow unknown sources (Settings → Applications), open
+   `http://<server-address>:8687/x10.apk` in the browser, install, and enter the
+   server address.
+
+To use a different port on your computer, set `SURFER_LEGACY_PORT` before
+building the app; it becomes the app's default port.
+
 ## Configuration
 
 All settings are optional. Put them in a `.env` file next to
@@ -185,6 +211,8 @@ All settings are optional. Put them in a `.env` file next to
 | `SURFER_PORT` | `8686` | Port the app connects to. The app's default port is taken from this when it is built. |
 | `SURFER_INSTALL_PORT` | `8687` | Port that serves the APK. |
 | `INSTALL_PORT` | `8687` | Set to `0` to turn the APK download off. |
+| `LEGACY_PORT` | `0` | `8688` turns on the TLS 1.0 port for the [Android 2.x app](#android-2x-devices). |
+| `SURFER_LEGACY_PORT` | `8688` | Port on your computer for that app; also its default port when built. |
 | `IDLE_STOP_MIN` | `30` | Minutes without a connection before a device's browser is closed and its temporary profile deleted. `0` keeps it until the server stops. |
 | `ACCEPT_LANGUAGE` | `en-US,en` | Languages requested from websites, most preferred first. Also used for search suggestions. |
 | `IDLE_FORMAT` | `png` | Lossless format for still pictures: `png` or `webp`. |
@@ -244,10 +272,12 @@ node test/e2e.mjs ./out https://example.org
 # SURFER_WS=wss://host:port/ws
 ```
 
-App unit tests run in the builder:
+App unit tests run in the builder (the X10 build also fails on any call
+newer than Android 2.1):
 
 ```sh
 docker compose run --rm android-builder build-apk testDebugUnitTest
+docker compose run --rm android-builder-x10 build-apk testDebugUnitTest lintRelease
 ```
 
 ### Repository layout
@@ -259,6 +289,7 @@ DESIGN.md              design and protocol
 server/                Node.js server (src/), debug client (debug/), tests (test/)
   seccomp-chromium.json  Docker's default seccomp profile plus Chromium's sandbox calls
 android/               Android app (plain Java, minSdk 19)
+android-x10/           Android 2.x app (plain Java, minSdk 7)
 android-builder/       Docker image that builds and signs the APK
 ```
 
@@ -268,5 +299,4 @@ android-builder/       Docker image that builds and signs the APK
   text selection and copy, clipboard paste.
 - HTTP authentication dialogs.
 - Bookmarks, downloads, audio.
-- An app for Android 2.1 devices.
 - Video and file uploads.

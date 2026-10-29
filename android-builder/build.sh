@@ -1,8 +1,16 @@
 #!/bin/sh
-# Builds the signed release APK into /data/apk/surfer.apk.
-# Mounts: /src (android project, read-only), /data (server volume),
+# Builds a signed release APK into /data/apk.
+#   SURFER_APP=tablet (default): /src      -> surfer.apk      (Android 4.4+)
+#   SURFER_APP=x10:              /src-x10  -> surfer-x10.apk  (Android 2.x)
+# Mounts: /src, /src-x10 (app projects, read-only), /data (server volume),
 #         /keystore (signing key, kept between builds), ~/.gradle (cache).
 set -eu
+
+case "${SURFER_APP:-tablet}" in
+  tablet) SRC=/src; OUT=surfer.apk ;;
+  x10) SRC=/src-x10; OUT=surfer-x10.apk; export SURFER_DEFAULT_PORT="${SURFER_LEGACY_DEFAULT_PORT:-8688}" ;;
+  *) echo "error: SURFER_APP must be tablet or x10" >&2; exit 1 ;;
+esac
 
 CERT=/data/tls/server.crt
 if [ ! -f "$CERT" ]; then
@@ -24,7 +32,7 @@ fi
 
 # Build from a writable copy; the source mount is read-only.
 rm -rf /work/project
-cp -r /src /work/project
+cp -r "$SRC" /work/project
 rm -rf /work/project/app/build /work/project/build /work/project/.gradle
 mkdir -p /work/project/app/src/main/res/raw
 cp "$CERT" /work/project/app/src/main/res/raw/server.crt
@@ -39,7 +47,7 @@ gradle --no-daemon --console=plain -p /work/project "$@"
 APK=/work/project/app/build/outputs/apk/release/app-release.apk
 if [ -f "$APK" ]; then
   mkdir -p /data/apk
-  cp "$APK" /data/apk/surfer.apk.tmp
-  mv /data/apk/surfer.apk.tmp /data/apk/surfer.apk
-  echo "APK: /data/apk/surfer.apk  version $SURFER_VERSION_CODE  sha256 $(sha256sum /data/apk/surfer.apk | cut -d' ' -f1)"
+  cp "$APK" "/data/apk/$OUT.tmp"
+  mv "/data/apk/$OUT.tmp" "/data/apk/$OUT"
+  echo "APK: /data/apk/$OUT  version $SURFER_VERSION_CODE  sha256 $(sha256sum "/data/apk/$OUT" | cut -d' ' -f1)"
 fi

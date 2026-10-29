@@ -18,6 +18,14 @@ const DEBUG_FILES: Record<string, string> = {
   '/debug/index.html': 'index.html',
   '/debug/client.js': 'client.js',
 };
+/** Download paths of the apps (tablet app for Android 4.4+, X10 app for Android 2.x). */
+const APKS: Record<string, string> = {
+  '/': 'surfer.apk',
+  '/app.apk': 'surfer.apk',
+  '/surfer.apk': 'surfer.apk',
+  '/x10.apk': 'surfer-x10.apk',
+  '/surfer-x10.apk': 'surfer-x10.apk',
+};
 const CONTENT_TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8',
   js: 'text/javascript; charset=utf-8',
@@ -42,7 +50,7 @@ async function main(): Promise<void> {
   await cleanStaleProfiles();
   const sessions = new SessionManager();
 
-  const https = createHttpsServer({ key: tls.key, cert: tls.cert, minVersion: 'TLSv1.2' }, (req, res) => {
+  const handleRequest = (req: IncomingMessage, res: ServerResponse) => {
     const path = new URL(req.url ?? '/', 'https://surfer').pathname;
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
@@ -57,11 +65,27 @@ async function main(): Promise<void> {
       return;
     }
     res.writeHead(404).end('Not found');
-  });
+  };
+  const https = createHttpsServer({ key: tls.key, cert: tls.cert, minVersion: 'TLSv1.2' }, handleRequest);
+  // Android 2.x speaks TLS 1.0 at most. Only ephemeral Diffie-Hellman suites are
+  // offered (forward secrecy); OpenSSL 3 needs security level 0 to allow TLS 1.0.
+  const legacy =
+    config.legacyPort > 0
+      ? createHttpsServer(
+          {
+            key: tls.key,
+            cert: tls.cert,
+            minVersion: 'TLSv1',
+            ciphers: 'DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:@SECLEVEL=0',
+            dhparam: 'auto',
+          },
+          handleRequest,
+        )
+      : undefined;
 
   // Large enough for one origin's saved localStorage during a restore.
   const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 * 1024, perMessageDeflate: false });
-  https.on('upgrade', (req, socket, head) => {
+  const upgrade = (req: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => {
     if (new URL(req.url ?? '/', 'https://surfer').pathname !== '/ws') {
       socket.destroy();
       return;
@@ -69,19 +93,23 @@ async function main(): Promise<void> {
     wss.handleUpgrade(req, socket, head, (ws) => {
       new Connection(ws, remoteIp(req), sessions);
     });
-  });
+  };
+  https.on('upgrade', upgrade);
+  legacy?.on('upgrade', upgrade);
 
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
   https.listen(config.port, () => log.info(`Surfer ${version} listening on https/wss port ${config.port} (in the container)`));
+  legacy?.listen(config.legacyPort, () => log.info(`legacy TLS 1.0 port ${config.legacyPort} for Android 2.x (in the container)`));
 
   // Plain HTTP, APK only: the tablet's old Chrome cannot open the self-signed HTTPS port.
   const install =
     config.installPort > 0
       ? createHttpServer((req, res) => {
           const path = new URL(req.url ?? '/', 'http://surfer').pathname;
-          if (req.method === 'GET' && (path === '/' || path === '/app.apk' || path === '/surfer.apk')) {
-            void sendFile(res, config.apkPath, 'application/vnd.android.package-archive', {
-              'Content-Disposition': 'attachment; filename="surfer.apk"',
+          const file = APKS[path];
+          if (req.method === 'GET' && file) {
+            void sendFile(res, join(config.apkDir, file), 'application/vnd.android.package-archive', {
+              'Content-Disposition': `attachment; filename="${file}"`,
             });
             return;
           }
@@ -96,6 +124,7 @@ async function main(): Promise<void> {
     log.info(`${signal}: saving sessions and stopping browsers`);
     for (const ws of wss.clients) ws.close(1001, 'server shutting down');
     https.close();
+    legacy?.close();
     install?.close();
     await sessions.stopAll();
     process.exit(0);

@@ -1,0 +1,5 @@
+build/
+.gradle/
+local.properties
+# Copied in by the builder from the server's /data/tls.
+app/src/main/res/raw/server.crt

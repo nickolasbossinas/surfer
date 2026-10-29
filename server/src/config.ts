@@ -12,11 +12,16 @@ const dataDir = process.env.DATA_DIR ?? '/data';
 
 export const config = {
   port: int('PORT', 8686),
-  /** Plain-HTTP port that serves only the APK. 0 disables it. */
+  /** Plain-HTTP port that serves only the APKs. 0 disables it. */
   installPort: int('INSTALL_PORT', 8687),
+  /**
+   * Second app port for devices that only speak TLS 1.0 (Android 2.x, the X10
+   * app), limited to forward-secret AES cipher suites. 0 (default) disables it.
+   */
+  legacyPort: int('LEGACY_PORT', 0),
   dataDir,
   tlsDir: join(dataDir, 'tls'),
-  apkPath: join(dataDir, 'apk', 'surfer.apk'),
+  apkDir: join(dataDir, 'apk'),
   chromePath: process.env.CHROME_PATH ?? '/usr/bin/chromium',
   /**
    * End a device's session (Chromium closed, profile deleted) after this many
