@@ -17,6 +17,10 @@ import { userAgentFor } from './useragent.js';
 const PROFILE_PREFIX = 'surfer-profile-';
 /** Sync messages kept while no device is connected (delivered on reconnect). */
 const MAX_QUEUED_SYNC = 20_000;
+/** A new picture stream must deliver its first frame within this time. */
+const CAST_START_TIMEOUT_MS = 2000;
+/** After a page loads, a picture must have arrived within this time. */
+const PAINT_CHECK_MS = 1500;
 
 /** The device connection a session streams to. */
 export interface Client extends FrameSink {
@@ -385,8 +389,31 @@ export class Session {
         const cast = new Screencast(tab.cdp, tab.id, this.client, this.viewport);
         this.screencast = cast;
         await cast.start();
+        this.verifyCast(cast, tab);
       })
       .catch((err) => this.log.warn('screencast restart failed', err));
+  }
+
+  /** Restarts in a row without a picture; limits retries on a page that cannot paint. */
+  private castRetries = 0;
+
+  /**
+   * Starting a screencast makes Chromium paint at once. If no frame arrives,
+   * the stream is stuck (seen when a restart overlaps a navigation): restart it.
+   */
+  private verifyCast(cast: Screencast, tab: Tab): void {
+    setTimeout(() => {
+      if (this.screencast !== cast || !this.client || this.stopping) return;
+      if (cast.lastFrameAt > 0) {
+        this.castRetries = 0;
+        return;
+      }
+      if (this.castRetries >= 3) return;
+      this.castRetries++;
+      this.log.warn(`tab ${tab.id}: no picture after starting the picture stream; restarting it (${this.castRetries})`);
+      void tab.page.bringToFront().catch(() => {});
+      this.restartCast();
+    }, CAST_START_TIMEOUT_MS);
   }
 
   // -------------------------------------------------------------------------
@@ -526,7 +553,7 @@ export class Session {
         await tab.page.bringToFront().catch(() => {});
         this.restartCast();
       })();
-    }, 4000);
+    }, PAINT_CHECK_MS);
   }
 
   private onStorageChange(tab: Tab, change: StorageChange): void {

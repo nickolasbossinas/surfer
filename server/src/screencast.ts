@@ -120,7 +120,10 @@ export class Screencast {
     clearTimeout(this.refineTimer);
     clearInterval(this.ackWatchdog);
     this.cdp.off('Page.screencastFrame', this.onFrame);
-    this.heldAcks.length = 0;
+    // Chromium waits for an acknowledgement of every frame it sent; leave none open.
+    for (const sessionId of this.heldAcks.splice(0)) this.ackChromium(sessionId);
+    if (this.pending) this.ackChromium(this.pending.sessionId);
+    this.pending = undefined;
     await this.cdp.send('Page.stopScreencast').catch(() => {});
   }
 
