@@ -12,7 +12,7 @@ import { CookieSync, isRestorableCookie, toCookieParam, type StorageChange } fro
 import { fetchSuggestions } from './suggest.js';
 import { Tab, type DialogMessage } from './tab.js';
 import { resolveInput } from './url.js';
-import { userAgentFor } from './useragent.js';
+import { ipadUserAgent, userAgentFor } from './useragent.js';
 
 const PROFILE_PREFIX = 'surfer-profile-';
 /** Sync messages kept while no device is connected (delivered on reconnect). */
@@ -130,7 +130,10 @@ export class Session {
         '--mute-audio',
         '--hide-scrollbars',
         '--force-color-profile=srgb',
-        '--disable-features=Translate,MediaRouter',
+        // The back/forward cache and prerendering swap the page a DevTools session is
+        // attached to; the session then talks to an inactive page (no picture, no
+        // input). Navigation runs on the server, so neither saves the device time.
+        '--disable-features=Translate,MediaRouter,BackForwardCache,Prerender2',
         `--lang=${language}`,
         // Without this the screencast renders at CSS size while the page moves
         // and only the still screenshots use the emulated pixel ratio.
@@ -376,7 +379,8 @@ export class Session {
   private async emulate(tab: Tab): Promise<void> {
     if (!this.viewport) return;
     const ua = userAgentFor(this.settings.layout, this.browserVersion, config.acceptLanguage);
-    await tab.applyEmulation(this.viewport, this.settings.layout, ua).catch((err) => this.log.warn('emulation failed', err));
+    const ipad = ipadUserAgent(this.browserVersion, config.acceptLanguage);
+    await tab.applyEmulation(this.viewport, this.settings.layout, ua, ipad).catch((err) => this.log.warn('emulation failed', err));
   }
 
   private restartCast(): void {
@@ -388,7 +392,12 @@ export class Session {
         if (!this.client || !this.viewport || !tab || this.stopping) return;
         const cast = new Screencast(tab.cdp, tab.id, this.client, this.viewport);
         this.screencast = cast;
-        await cast.start();
+        try {
+          await cast.start();
+        } catch (err) {
+          // Seen while the tab switches pages (e.g. during a restore); verifyCast retries.
+          this.log.warn(`tab ${tab.id}: starting the picture stream failed: ${(err as Error).message}`);
+        }
         this.verifyCast(cast, tab);
       })
       .catch((err) => this.log.warn('screencast restart failed', err));

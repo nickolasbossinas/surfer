@@ -6,7 +6,7 @@ import type { ServerMessage, TabInfo, UserSettings } from './protocol.js';
 import { writeStorage, type StorageData } from './restore.js';
 import type { Viewport } from './screencast.js';
 import { watchStorage, type StorageChange } from './sync.js';
-import type { UserAgentOverride } from './useragent.js';
+import { needsIpadIdentity, type UserAgentOverride } from './useragent.js';
 
 const log = logger('tab');
 
@@ -34,6 +34,12 @@ export class Tab {
   private closed = false;
   /** An alert/confirm/prompt/beforeunload the page is waiting on (it is frozen until answered). */
   private dialog: DialogMessage | undefined;
+  /** The identity for the layout, and the iPad one for sites that need it (see useragent.ts). */
+  private ua: UserAgentOverride | undefined;
+  private ipadUa: UserAgentOverride | undefined;
+  private usingIpad = false;
+  /** writeStorage owns the Fetch domain while it runs. */
+  private restoringStorage = false;
 
   private constructor(
     readonly id: number,
@@ -113,6 +119,10 @@ export class Tab {
     cdp.on('Page.javascriptDialogClosed', () => {
       this.dialog = undefined;
     });
+    cdp.on('Fetch.requestPaused', (e: Protocol.Fetch.RequestPausedEvent) => {
+      if (!this.restoringStorage) void this.onDocumentRequest(e);
+    });
+    await this.watchDocuments();
     await watchStorage(cdp, (change) => {
       if (!this.closed) this.onStorage(this, change);
     });
@@ -125,16 +135,100 @@ export class Tab {
    * sessionStorage, then loads the page and drops the helper history entries.
    */
   async restore(url: string, session: StorageData | undefined): Promise<void> {
-    if (session) await writeStorage(this.cdp, 'session', session);
+    if (session) {
+      this.restoringStorage = true;
+      try {
+        await writeStorage(this.cdp, 'session', session);
+      } finally {
+        this.restoringStorage = false;
+        await this.watchDocuments();
+      }
+    }
     try {
+      await this.setIdentity(this.wantsIpad(url), url);
+      const committed = this.mainFrameNavigated(5000);
       await this.cdp.send('Page.navigate', { url });
-      if (session) await this.cdp.send('Page.resetNavigationHistory');
+      // The helper pages of the storage restore must not stay in the history; the
+      // history can only be reset once the new page is the current one.
+      if (session) {
+        await committed;
+        await this.cdp.send('Page.resetNavigationHistory');
+      }
     } catch (err) {
       log.warn(`restoring tab ${url} failed`, err);
     }
   }
 
-  async applyEmulation(viewport: Viewport, layout: UserSettings['layout'], ua: UserAgentOverride): Promise<void> {
+  /** Pauses every page load briefly, to choose the identity for its site. */
+  private async watchDocuments(): Promise<void> {
+    await this.cdp.send('Fetch.enable', { patterns: [{ resourceType: 'Document', requestStage: 'Request' }] }).catch((err) => log.warn('document watch failed', err));
+  }
+
+  /** The identity a page load of `url` needs, in the main frame. */
+  private wantsIpad(url: string): boolean {
+    return !!this.ipadUa && needsIpadIdentity(url);
+  }
+
+  /** Switches the tab's identity; only call while no page load is paused. */
+  private async setIdentity(ipad: boolean, url: string): Promise<void> {
+    if (ipad === this.usingIpad || !this.ua) return;
+    this.usingIpad = ipad;
+    log.info(`tab ${this.id}: ${ipad ? 'iPad' : 'normal'} identity for ${new URL(url).origin}`);
+    await this.cdp.send('Emulation.setUserAgentOverride', ipad ? this.ipadUa! : this.ua).catch(() => {});
+  }
+
+  /**
+   * Every main-frame page load passes here. Loads Surfer starts already have the
+   * right identity (navigate, restore). A load the page starts (a link) that
+   * needs the other identity is cancelled and started again after the switch:
+   * the identity cannot change while a load is paused, and the request and the
+   * new page's scripts must both see the new one.
+   */
+  private async onDocumentRequest(e: Protocol.Fetch.RequestPausedEvent): Promise<void> {
+    const proceed = () => this.cdp.send('Fetch.continueRequest', { requestId: e.requestId }).catch(() => {});
+    if (e.frameId !== this.mainFrameId || !this.ua) {
+      await proceed();
+      return;
+    }
+    const ipad = this.wantsIpad(e.request.url);
+    if (ipad === this.usingIpad || e.request.method !== 'GET') {
+      await proceed();
+      return;
+    }
+    await this.cdp.send('Fetch.failRequest', { requestId: e.requestId, errorReason: 'Aborted' }).catch(() => {});
+    await this.setIdentity(ipad, e.request.url);
+    const referrer = e.request.headers['Referer'] ?? e.request.headers['referer'];
+    await this.cdp
+      .send('Page.navigate', { url: e.request.url, ...(referrer ? { referrer } : {}) })
+      .catch((err) => log.warn('reloading with the other identity failed', err));
+  }
+
+  /** Resolves when the main frame commits a new page (or after `timeoutMs`). */
+  private mainFrameNavigated(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.cdp.off('Page.frameNavigated', onNav);
+        resolve();
+      };
+      const onNav = (e: Protocol.Page.FrameNavigatedEvent) => {
+        if (!e.frame.parentId) done();
+      };
+      const timer = setTimeout(done, timeoutMs);
+      this.cdp.on('Page.frameNavigated', onNav);
+    });
+  }
+
+  async applyEmulation(
+    viewport: Viewport,
+    layout: UserSettings['layout'],
+    ua: UserAgentOverride,
+    ipadUa: UserAgentOverride,
+  ): Promise<void> {
+    this.ua = ua;
+    // The desktop layout works on those sites as it is.
+    this.ipadUa = layout === 'desktop' ? undefined : ipadUa;
+    if (!this.ipadUa) this.usingIpad = false;
     const mobile = layout !== 'desktop';
     const w = Math.round(viewport.w);
     const h = Math.round(viewport.h);
@@ -148,7 +242,7 @@ export class Tab {
         screenHeight: h,
       }),
       this.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }),
-      this.cdp.send('Emulation.setUserAgentOverride', ua),
+      this.cdp.send('Emulation.setUserAgentOverride', this.usingIpad && this.ipadUa ? this.ipadUa : ua),
     ]);
   }
 
@@ -167,7 +261,10 @@ export class Tab {
   }
 
   navigate(url: string): void {
-    this.cdp.send('Page.navigate', { url }).catch((err) => log.warn(`navigate ${url} failed`, err));
+    void (async () => {
+      await this.setIdentity(this.wantsIpad(url), url);
+      await this.cdp.send('Page.navigate', { url });
+    })().catch((err) => log.warn(`navigate ${url} failed`, err));
   }
 
   async back(): Promise<void> {

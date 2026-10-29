@@ -29,6 +29,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The device's saved state, kept up to date from sync messages (like the app does).
 const saved = { cookies: new Map(), local: {}, tabs: [], active: 0, settings: {} };
+// E2E_COOKIES: JSON list of cookies the "device" starts with (e.g. a consent cookie).
+for (const c of JSON.parse(process.env.E2E_COOKIES ?? '[]')) saved.cookies.set(`${c.name}|${c.domain}|${c.path}`, c);
+// E2E_TABS: JSON list of URLs the "device" had open, restored at the start.
+saved.tabs = JSON.parse(process.env.E2E_TABS ?? '[]').map((t) => (typeof t === 'string' ? { url: t } : t));
 const cookieKey = (c) => `${c.name}\u0001${c.domain}\u0001${c.path}\u0001${c.partitionKey ? JSON.stringify(c.partitionKey) : ''}`;
 let syncMessages = 0;
 
@@ -152,9 +156,14 @@ function connect(deviceId) {
 async function load(c, url, name) {
   const started = performance.now();
   const firstFrames = c.frames.length;
-  c.send({ t: 'navigate', tabId: c.activeId, input: url });
-  await c.waitMessage((m) => m.t === 'tabUpdate' && m.id === c.activeId && m.loading === true, 15000).catch(() => {});
-  await c.waitMessage((m) => m.t === 'tabUpdate' && m.id === c.activeId && m.loading === false, 45000);
+  // "stay": no navigation, use the page already open (e.g. a restored tab).
+  if (url !== 'stay') {
+    c.send({ t: 'navigate', tabId: c.activeId, input: url });
+    await c.waitMessage((m) => m.t === 'tabUpdate' && m.id === c.activeId && m.loading === true, 15000).catch(() => {});
+    await c.waitMessage((m) => m.t === 'tabUpdate' && m.id === c.activeId && m.loading === false, 45000);
+  } else {
+    await sleep(5000);
+  }
   await c.quiet();
   const file = `${name}.png`;
   await c.save(file);
@@ -195,6 +204,18 @@ try {
   for (const [i, url] of urls.entries()) {
     await load(c, url, String(i + 1).padStart(2, '0'));
     if (process.env.SWIPE === '1') await swipe(c);
+  }
+
+  // TAP=x,y[;x,y...]: tap each point (CSS px of the screen) and save the picture after each.
+  for (const [i, point] of (process.env.TAP ? process.env.TAP.split(';') : []).entries()) {
+    const [x, y] = point.split(',').map(Number);
+    const before = c.frames.length;
+    const t = Date.now();
+    c.send({ t: 'touch', phase: 'start', time: t, points: [{ id: 0, x, y }] });
+    c.send({ t: 'touch', phase: 'end', time: t + 60, points: [] });
+    await c.quiet(1000, 6000);
+    await c.save(`tap${i + 1}.png`);
+    console.log(`tap ${x},${y}: ${c.frames.length - before} updates → tap${i + 1}.png`);
   }
 
   if (process.env.SUGGEST) {

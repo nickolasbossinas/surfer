@@ -5,7 +5,30 @@ export interface UserAgentOverride {
   userAgent: string;
   acceptLanguage: string;
   platform: string;
-  userAgentMetadata: Protocol.Emulation.UserAgentMetadata;
+  /** Client hints; without them none are sent (as Safari does). */
+  userAgentMetadata?: Protocol.Emulation.UserAgentMetadata;
+}
+
+/**
+ * Sites whose Android web version does not work in Surfer's browser. Google
+ * Maps for Android never receives input from Chromium's DevTools touch events
+ * (and blocks the tab's touch handling, which then stays stuck on every page of
+ * the site). Its iPad version works with touch and keeps the tablet layout.
+ */
+const IPAD_SITES = [/^https:\/\/(www\.)?google\.[a-z.]+\/maps([/?#]|$)/, /^https:\/\/maps\.google\.[a-z.]+([/?#]|$)/];
+
+export function needsIpadIdentity(url: string): boolean {
+  return IPAD_SITES.some((re) => re.test(url));
+}
+
+/** Chrome on iPad: a touch tablet that is not Android. */
+export function ipadUserAgent(browserVersion: string, acceptLanguage: string): UserAgentOverride {
+  const major = /\/(\d+)/.exec(browserVersion)?.[1] ?? '130';
+  return {
+    userAgent: `Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/${major}.0.0.0 Mobile/15E148 Safari/604.1`,
+    acceptLanguage,
+    platform: 'iPad',
+  };
 }
 
 /**

@@ -18,6 +18,8 @@ const TOUCH_TYPES = {
 
 /** Event times further than this from the server clock are replaced by "now". */
 const MAX_CLOCK_SKEW_MS = 5000;
+/** A touch Chromium has not answered after this long is stuck. */
+const TOUCH_HANG_MS = 3000;
 
 function fail(what: string) {
   return (err: unknown) => log.debug(`${what} failed`, err);
@@ -60,10 +62,24 @@ export class InputController {
             force: p.force ?? 1,
           }));
     if ((type === 'touchStart' || type === 'touchMove') && touchPoints.length === 0) return;
+    let answered = false;
     this.cdp
       .send('Input.dispatchTouchEvent', { type, touchPoints, timestamp: timestamp(msg.time) })
-      .catch(fail('touch'));
+      .catch(fail('touch'))
+      .finally(() => (answered = true));
+    // Chromium answers once the page has handled the touch. A touch that is never
+    // answered blocks every later one (seen with Google Maps' Android version).
+    setTimeout(() => {
+      if (answered || this.reportedHang) return;
+      this.reportedHang = true;
+      void this.cdp
+        .send('Runtime.evaluate', { expression: 'location.origin', returnByValue: true })
+        .then((r) => log.warn(`touches are not being handled on ${String(r.result.value)}; input is stuck on this page`))
+        .catch(() => {});
+    }, TOUCH_HANG_MS);
   }
+
+  private reportedHang = false;
 
   wheel(msg: WheelMsg, pageScale = 1): void {
     const k = 1 / (pageScale > 0 ? pageScale : 1);
