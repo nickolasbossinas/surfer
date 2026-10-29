@@ -87,6 +87,8 @@ export class Screencast {
   private changedAt = new Float64Array(0);
   private refineTimer: NodeJS.Timeout | undefined;
   private lastShape = '';
+  /** When Chromium last sent a frame (ms); 0 before the first. */
+  lastFrameAt = 0;
   private readonly onFrame = (e: Protocol.Page.ScreencastFrameEvent) => this.handleFrame(e);
 
   constructor(
@@ -151,6 +153,7 @@ export class Screencast {
 
   private handleFrame(e: Protocol.Page.ScreencastFrameEvent): void {
     if (this.stopped) return;
+    this.lastFrameAt = Date.now();
     // Only the newest frame matters; an older unprocessed one is skipped.
     if (this.pending) this.ackChromium(this.pending.sessionId);
     this.pending = e;

@@ -489,6 +489,44 @@ export class Session {
 
   private onTabChange(tab: Tab): void {
     if (this.launched) this.client?.send({ t: 'tabUpdate', ...tab.info });
+    if (tab.id !== this.activeId) return;
+    if (tab.info.loading) {
+      this.loadStartedAt ||= Date.now();
+    } else if (this.loadStartedAt) {
+      this.checkPainting(tab, this.loadStartedAt);
+      this.loadStartedAt = 0;
+    }
+  }
+
+  private stallTimer: NodeJS.Timeout | undefined;
+  /** When the active tab's current navigation started (0 when not loading). */
+  private loadStartedAt = 0;
+
+  /**
+   * A page loaded: a new document always paints. If Chromium sent no frame since
+   * the navigation started, the tab is not painting (for example it is
+   * considered hidden): log its state
+   * and restart the picture stream with the tab brought to the front.
+   */
+  private checkPainting(tab: Tab, since: number): void {
+    clearTimeout(this.stallTimer);
+    this.stallTimer = setTimeout(() => {
+      const cast = this.screencast;
+      if (!cast || !this.client || tab.id !== this.activeId || this.stopping) return;
+      if (cast.lastFrameAt >= since) return;
+      void (async () => {
+        const state = await Promise.race([
+          tab.cdp
+            .send('Runtime.evaluate', { expression: '[document.visibilityState, document.readyState, location.origin].join(" ")', returnByValue: true })
+            .then((r) => String(r.result.value))
+            .catch((err: Error) => `evaluate failed: ${err.message}`),
+          new Promise<string>((resolve) => setTimeout(() => resolve('page not responding'), 2000)),
+        ]);
+        this.log.warn(`tab ${tab.id}: no picture since the page loaded (${state}); restarting the picture stream`);
+        await tab.page.bringToFront().catch(() => {});
+        this.restartCast();
+      })();
+    }, 4000);
   }
 
   private onStorageChange(tab: Tab, change: StorageChange): void {
