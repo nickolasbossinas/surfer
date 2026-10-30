@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds a signed release APK into /data/apk.
 #   SURFER_APP=tablet (default): /src      -> surfer.apk      (Android 4.4+)
-#   SURFER_APP=x10:              /src-x10  -> surfer-x10.apk  (Android 2.x)
+#   SURFER_APP=x10:              /src-x10  -> surfer-x10.apk  (Android 1.6 to 4.3)
 # Mounts: /src, /src-x10 (app projects, read-only), /data (server volume),
 #         /keystore (signing key, kept between builds), ~/.gradle (cache).
 set -eu
@@ -48,6 +48,15 @@ fi
 gradle --no-daemon --console=plain -p /work/project "$@"
 
 APK=/work/project/app/build/outputs/apk/release/app-release.apk
+if [ -f "$APK" ] && [ "$OUT" = surfer-x10.apk ]; then
+  # Android 2.1 cannot read aapt2's UTF-8 string pools ("parse error"): rewrite
+  # them as UTF-16, then sign again (v1 only, the scheme Android 2.x checks).
+  BT="$ANDROID_HOME/build-tools/36.0.0"
+  java /usr/local/lib/surfer/Utf16Pools.java "$APK" /work/utf16.apk
+  "$BT/zipalign" -f -p 4 /work/utf16.apk /work/aligned.apk
+  "$BT/apksigner" sign --ks "$KEYSTORE" --ks-type PKCS12 --ks-key-alias surfer --ks-pass "file:$PASSFILE"     --min-sdk-version 4 --v1-signing-enabled true --v2-signing-enabled false --v3-signing-enabled false     --out "$APK" /work/aligned.apk
+  rm -f /work/utf16.apk /work/aligned.apk
+fi
 if [ -f "$APK" ]; then
   mkdir -p /data/apk
   cp "$APK" "/data/apk/$OUT.tmp"

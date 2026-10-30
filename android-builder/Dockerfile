@@ -36,6 +36,7 @@ RUN curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gra
  && rm /tmp/gradle.zip
 
 COPY build.sh /usr/local/bin/build-apk
+COPY Utf16Pools.java /usr/local/lib/surfer/Utf16Pools.java
 RUN chmod +x /usr/local/bin/build-apk \
  && mkdir -p /keystore /work /home/ubuntu/.gradle \
  && chown -R ubuntu:ubuntu /keystore /work /home/ubuntu/.gradle

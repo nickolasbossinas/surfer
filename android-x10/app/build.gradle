@@ -33,9 +33,10 @@ android {
                 keyAlias = 'surfer'
                 keyPassword = System.getenv('SURFER_KEYSTORE_PASSWORD')
             }
-            // Android 2.x only verifies v1 (JAR) signatures.
+            // Android 2.x only verifies v1 (JAR) signatures. The builder signs the
+            // APK again after converting its string pools (android-builder/build.sh).
             enableV1Signing = true
-            enableV2Signing = true
+            enableV2Signing = false
         }
     }
 
