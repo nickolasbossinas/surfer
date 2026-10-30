@@ -354,6 +354,9 @@ Java, plain Android SDK, `minSdk 19`, `targetSdk 36`, no AndroidX.
 `android-x10/`, package `surfer.x10`, minSdk 4. A copy of the tablet app
 adapted to Android 1.6 and 2.x; the tablet app is not constrained by it. Lint fails the
 build on any platform call newer than API 4 (`NewApi`, `InlinedApi`); multitouch (API 5) is used only where the device has it.
+aapt2 always writes UTF-8 string pools (Android 2.2+), which Android 2.1 cannot
+parse; the builder rewrites them as UTF-16 (`android-builder/Utf16Pools.java`)
+and signs the APK again, v1 only.
 
 | Tablet app | X10 app | Why |
 |---|---|---|

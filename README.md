@@ -10,7 +10,7 @@ Puffin or Opera Mini, but on your own machine, so your logins and browsing
 never pass through anyone else's servers.
 
 Version **0.2.0**. It is used daily on an Android 4.4.2 tablet, mostly for
-reading and email.
+reading and email, and runs on an Xperia X10 mini with Android 2.1.
 
 ---
 
@@ -20,7 +20,7 @@ reading and email.
   rendered by a current Chromium (156 at the time of writing). The main app
   needs Android 4.4 (API 19) or later; a second app runs on Android 1.6 to
   4.3 devices such as the Sony Ericsson Xperia X10 and X10 mini (see
-  [Android 2.x devices](#android-2x-devices)).
+  [older Android devices](#older-android-devices-16-to-43)).
 - **Native-feeling touch.** Tap, scroll, fling and pinch-zoom are forwarded as
   real multi-touch events with their original timing, so scrolling momentum
   and gestures behave like a phone browser.
@@ -97,7 +97,7 @@ a local Java installation.
 - Enough memory for one Chromium per connected device. The container is
   limited to 6 GB by default.
 - An Android device with Android 4.4 or later (or 1.6 to 4.3 with the
-  [Android 2.x app](#android-2x-devices)), on the same network.
+  [app for older Android](#older-android-devices-16-to-43)), on the same network.
 
 ## Quick start
 
@@ -177,13 +177,14 @@ docker compose run --rm android-builder
 Then download and install the APK again from the same address. The update
 installs over the old app and keeps your browsing data.
 
-## Android 2.x devices
+## Older Android devices (1.6 to 4.3)
 
-Devices older than Android 4.4, such as the Xperia X10 and X10 mini (Android 1.6 or 2.1), use a
-separate app, **Surfer X10** (`android-x10/`). It works like the main app,
-adapted to a small single-touch phone: the Menu key opens the menu (forward,
-tabs, layout, full screen and more), and sites get their phone layout by
-default.
+Devices older than Android 4.4, such as the Xperia X10 and X10 mini (Android
+1.6 or 2.1), use a separate app, **Surfer X10** (`android-x10/`). It works like
+the main app, adapted to a small phone: the Menu key opens the menu (forward,
+tabs, layout, full screen and more), sites get their phone layout by default,
+and multitouch is used only where the device has it. The build makes the APK
+readable by Android 2.1 and older (see [Development](#development)).
 
 Android 2.x can only use TLS 1.0, which the main port does not accept. The
 server therefore has a second port for these devices, **off by default**. It
@@ -211,7 +212,7 @@ All settings are optional. Put them in a `.env` file next to
 | `SURFER_PORT` | `8686` | Port the app connects to. The app's default port is taken from this when it is built. |
 | `SURFER_INSTALL_PORT` | `8687` | Port that serves the APK. |
 | `INSTALL_PORT` | `8687` | Set to `0` to turn the APK download off. |
-| `LEGACY_PORT` | `0` | `8688` turns on the TLS 1.0 port for the [Android 2.x app](#android-2x-devices). |
+| `LEGACY_PORT` | `0` | `8688` turns on the TLS 1.0 port for the [app for older Android](#older-android-devices-16-to-43). |
 | `SURFER_LEGACY_PORT` | `8688` | Port on your computer for that app; also its default port when built. |
 | `IDLE_STOP_MIN` | `30` | Minutes without a connection before a device's browser is closed and its temporary profile deleted. `0` keeps it until the server stops. |
 | `ACCEPT_LANGUAGE` | `en-US,en` | Languages requested from websites, most preferred first. Also used for search suggestions. |
@@ -242,6 +243,7 @@ Google, Bing and DuckDuckGo.
 |---|---|
 | The app cannot connect | Same network? Firewall rule for the port? `docker compose ps` shows the server running and healthy? |
 | "The server's certificate does not match this app" | The server's certificate changed (the data volume was recreated). Rebuild the app and reinstall it. |
+| "Parse error" when installing the X10 app | The device needs Android 1.6 or later. Build the app with `docker compose run --rm android-builder-x10`, which makes the APK readable by old Android. |
 | The APK download does not start | Use `http://` (not https) and the install port, and check `INSTALL_PORT` is not `0`. |
 | Chromium fails to start (sandbox errors in the log) | The host must allow unprivileged user namespaces. On Ubuntu 24.04 and later, AppArmor may restrict them for containers. |
 | A website asks to prove you are not a robot | Some sites treat browsers in data centres or automated environments with suspicion. Solve the check once; the cookie is kept on the device. |
@@ -280,6 +282,12 @@ docker compose run --rm android-builder build-apk testDebugUnitTest
 docker compose run --rm android-builder-x10 build-apk testDebugUnitTest lintRelease
 ```
 
+The X10 build has one extra step. The Android build tools (aapt2) store the
+app's texts in UTF-8, which only Android 2.2 and later can read; Android 2.1
+rejects such an APK with "parse error". The builder therefore rewrites them as
+UTF-16 (`android-builder/Utf16Pools.java`) and signs the APK again with the v1
+scheme, the one Android 2.x checks.
+
 ### Repository layout
 
 ```
@@ -289,8 +297,8 @@ DESIGN.md              design and protocol
 server/                Node.js server (src/), debug client (debug/), tests (test/)
   seccomp-chromium.json  Docker's default seccomp profile plus Chromium's sandbox calls
 android/               Android app (plain Java, minSdk 19)
-android-x10/           Android 2.x app (plain Java, minSdk 4)
-android-builder/       Docker image that builds and signs the APK
+android-x10/           app for Android 1.6 to 4.3 (plain Java, minSdk 4)
+android-builder/       Docker image that builds and signs the APKs
 ```
 
 ## Roadmap
