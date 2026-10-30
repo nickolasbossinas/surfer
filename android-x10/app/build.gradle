@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = 'surfer.x10'
-        minSdk = 7
+        minSdk = 4
         targetSdk = 36
         versionCode = versionCodeEnv ? versionCodeEnv.toInteger() : 1
         versionName = project.property('surferVersion')
@@ -52,7 +52,7 @@ android {
     }
 
     lint {
-        // Every platform call must exist on Android 2.1 (API 7): calling a newer
+        // Every platform call must exist on Android 1.6 (API 4): calling a newer
         // one crashes there, so the build fails instead.
         checkReleaseBuilds = true
         abortOnError = true
@@ -62,6 +62,6 @@ android {
 }
 
 dependencies {
-    // No libraries: none of today's support Android 2.1.
+    // No libraries: none of today's support Android 1.6.
     testImplementation 'junit:junit:4.13.2'
 }

@@ -11,7 +11,7 @@ session runs.
 
 - **Primary client:** Android 4.4.2 tablet (API 19), native app. No compromises
   for the sake of other devices.
-- **Secondary client:** Xperia X10, Android 2.1 (API 7). A separate app
+- **Secondary client:** Xperia X10 / X10 mini, Android 1.6+ (API 4). A separate app
   (`android-x10/`) that shares only the protocol (§4.2).
 - **Server:** Docker on a 64-bit machine (x86-64 or ARM64). Windows with Docker
   Desktop (WSL2) and native Linux are both supported.
@@ -28,7 +28,7 @@ session runs.
 | Native pickers (select, date/time, colour), context menu, text selection | v1 |
 | Tabs, clipboard, JS and HTTP-auth dialogs | v1 |
 | Device identity, browser state stored on the device and synced live | v1 |
-| X10 app (Android 2.1) | v1 |
+| X10 app (Android 1.6+) | v1 |
 | Bookmarks, downloads, audio | later |
 | Video (H.264), file uploads | much later |
 
@@ -349,11 +349,11 @@ Java, plain Android SDK, `minSdk 19`, `targetSdk 36`, no AndroidX.
 - "Clear browsing data" sends `forget`; the server wipes the session and answers
   `forgotten`, and the device deletes its files.
 
-### 4.2 X10 app (Android 2.1)
+### 4.2 X10 app (Android 1.6+)
 
-`android-x10/`, package `surfer.x10`, minSdk 7. A copy of the tablet app
-adapted to Android 2.1; the tablet app is not constrained by it. Lint fails the
-build on any platform call newer than API 7 (`NewApi`, `InlinedApi`).
+`android-x10/`, package `surfer.x10`, minSdk 4. A copy of the tablet app
+adapted to Android 1.6 and 2.x; the tablet app is not constrained by it. Lint fails the
+build on any platform call newer than API 4 (`NewApi`, `InlinedApi`); multitouch (API 5) is used only where the device has it.
 
 | Tablet app | X10 app | Why |
 |---|---|---|
@@ -545,7 +545,7 @@ Surfer/
 │  ├─ debug/                   desktop debug client (same protocol)
 │  └─ test/                    unit and integration tests
 ├─ android/                    tablet app (Gradle project): net/, view/, state/
-├─ android-x10/                X10 app for Android 2.1 (Gradle project, §4.2)
+├─ android-x10/                X10 app for Android 1.6+ (Gradle project, §4.2)
 └─ android-builder/            Dockerfile, build.sh
 ```
 

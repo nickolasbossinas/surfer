@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.Build;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
@@ -275,7 +276,8 @@ public class FrameView extends View {
     public boolean onTouchEvent(MotionEvent e) {
         if (listener == null) return false;
         // getActionMasked()/getActionIndex() are Android 2.2; these masks are 2.0.
-        int action = e.getAction() & MotionEvent.ACTION_MASK;
+        // Android 1.6 has a single pointer and no masks.
+        int action = MULTITOUCH ? e.getAction() & MotionEvent.ACTION_MASK : e.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 listener.onTouch("start", e.getEventTime(), points(e, -1, -1));
@@ -305,8 +307,12 @@ public class FrameView extends View {
         return true;
     }
 
+    /** Multi-pointer MotionEvents are Android 2.0 (API 5). */
+    private static final boolean MULTITOUCH = Build.VERSION.SDK_INT >= 5;
+
     @SuppressWarnings("deprecation")
     private static int pointerIndex(MotionEvent e) {
+        if (Build.VERSION.SDK_INT < 5) return 0;
         return (e.getAction() & MotionEvent.ACTION_POINTER_ID_MASK) >> MotionEvent.ACTION_POINTER_ID_SHIFT;
     }
 
@@ -314,6 +320,12 @@ public class FrameView extends View {
     private JSONArray points(MotionEvent e, int history, int skipIndex) {
         JSONArray out = new JSONArray();
         try {
+            if (Build.VERSION.SDK_INT < 5) {
+                float x = history < 0 ? e.getX() : e.getHistoricalX(history);
+                float y = history < 0 ? e.getY() : e.getHistoricalY(history);
+                out.put(new JSONObject().put("id", 0).put("x", round(x / density)).put("y", round(y / density)));
+                return out;
+            }
             for (int i = 0; i < e.getPointerCount(); i++) {
                 if (i == skipIndex) continue;
                 float x = history < 0 ? e.getX(i) : e.getHistoricalX(i, history);

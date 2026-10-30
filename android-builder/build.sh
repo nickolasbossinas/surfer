@@ -41,7 +41,10 @@ export SURFER_KEYSTORE="$KEYSTORE"
 export SURFER_KEYSTORE_PASSWORD="$(cat "$PASSFILE")"
 export SURFER_VERSION_CODE="$(( $(date +%s) / 60 ))"
 
-[ $# -eq 0 ] && set -- assembleRelease
+# The X10 app also runs full lint: its API-level check is what keeps it working on old Android.
+if [ $# -eq 0 ]; then
+  if [ "$OUT" = surfer-x10.apk ]; then set -- lintRelease assembleRelease; else set -- assembleRelease; fi
+fi
 gradle --no-daemon --console=plain -p /work/project "$@"
 
 APK=/work/project/app/build/outputs/apk/release/app-release.apk

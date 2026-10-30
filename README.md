@@ -16,10 +16,10 @@ reading and email.
 
 ## Features
 
-- **The modern web on Android 4.4+, and even Android 2.1.** Pages are
+- **The modern web on Android 4.4+, and even Android 1.6.** Pages are
   rendered by a current Chromium (156 at the time of writing). The main app
-  needs Android 4.4 (API 19) or later; a second app runs on Android 2.1 and
-  2.2 devices such as the Sony Ericsson Xperia X10 (see
+  needs Android 4.4 (API 19) or later; a second app runs on Android 1.6 to
+  4.3 devices such as the Sony Ericsson Xperia X10 and X10 mini (see
   [Android 2.x devices](#android-2x-devices)).
 - **Native-feeling touch.** Tap, scroll, fling and pinch-zoom are forwarded as
   real multi-touch events with their original timing, so scrolling momentum
@@ -96,7 +96,7 @@ a local Java installation.
   Windows or macOS with Docker Desktop, all work.
 - Enough memory for one Chromium per connected device. The container is
   limited to 6 GB by default.
-- An Android device with Android 4.4 or later (or 2.1 to 4.3 with the
+- An Android device with Android 4.4 or later (or 1.6 to 4.3 with the
   [Android 2.x app](#android-2x-devices)), on the same network.
 
 ## Quick start
@@ -179,7 +179,7 @@ installs over the old app and keeps your browsing data.
 
 ## Android 2.x devices
 
-Devices older than Android 4.4, such as the Xperia X10 (Android 2.1), use a
+Devices older than Android 4.4, such as the Xperia X10 and X10 mini (Android 1.6 or 2.1), use a
 separate app, **Surfer X10** (`android-x10/`). It works like the main app,
 adapted to a small single-touch phone: the Menu key opens the menu (forward,
 tabs, layout, full screen and more), and sites get their phone layout by
@@ -273,7 +273,7 @@ node test/e2e.mjs ./out https://example.org
 ```
 
 App unit tests run in the builder (the X10 build also fails on any call
-newer than Android 2.1):
+newer than Android 1.6):
 
 ```sh
 docker compose run --rm android-builder build-apk testDebugUnitTest
@@ -289,7 +289,7 @@ DESIGN.md              design and protocol
 server/                Node.js server (src/), debug client (debug/), tests (test/)
   seccomp-chromium.json  Docker's default seccomp profile plus Chromium's sandbox calls
 android/               Android app (plain Java, minSdk 19)
-android-x10/           Android 2.x app (plain Java, minSdk 7)
+android-x10/           Android 2.x app (plain Java, minSdk 4)
 android-builder/       Docker image that builds and signs the APK
 ```
 

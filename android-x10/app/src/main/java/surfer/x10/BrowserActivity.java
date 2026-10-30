@@ -824,6 +824,8 @@ public class BrowserActivity extends Activity implements ServerConnection.Listen
     }
 
     private int maxTouchPoints() {
+        // Android 1.6 has neither multitouch nor a way to ask.
+        if (Build.VERSION.SDK_INT < 5) return 1;
         PackageManager pm = getPackageManager();
         // Literal names: the constants are newer than Android 2.1 (the X10 itself is single-touch).
         if (pm.hasSystemFeature("android.hardware.touchscreen.multitouch.jazzhand")) return 5;
